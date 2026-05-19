@@ -1195,6 +1195,8 @@ struct FilePreviewPanelView: View {
 
     @State private var focusFlashOpacity = 0.0
     @State private var focusFlashAnimationGeneration = 0
+    @AppStorage("filePreview.textEditor.wordWrap")
+    private var wordWrapEnabled = true
 
     private var themeForegroundColor: NSColor {
         appearance.foregroundColor
@@ -1251,6 +1253,14 @@ struct FilePreviewPanelView: View {
                     isDisabled: !panel.isDirty || panel.isSaving,
                     action: { panel.saveTextContent() }
                 )
+
+                PanelHeaderIconButton(
+                    systemName: wordWrapEnabled ? "text.word.spacing" : "text.alignleft",
+                    label: wordWrapEnabled
+                        ? String(localized: "filePreview.wordWrap.disable", defaultValue: "Disable Word Wrap")
+                        : String(localized: "filePreview.wordWrap.enable", defaultValue: "Enable Word Wrap"),
+                    action: { wordWrapEnabled.toggle() }
+                )
             }
 
             FileExternalOpenMenu(fileURL: panel.fileURL, isDisabled: panel.isFileUnavailable)
@@ -1269,7 +1279,8 @@ struct FilePreviewPanelView: View {
                     isVisibleInUI: isVisibleInUI,
                     themeBackgroundColor: contentBackgroundColor,
                     themeForegroundColor: themeForegroundColor,
-                    drawsBackground: appearance.drawsContentBackground
+                    drawsBackground: appearance.drawsContentBackground,
+                    wordWrapEnabled: wordWrapEnabled
                 )
             case .pdf:
                 FilePreviewPDFView(

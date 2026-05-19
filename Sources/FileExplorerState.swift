@@ -24,6 +24,11 @@ final class FileExplorerState: ObservableObject {
         didSet { UserDefaults.standard.set(showHiddenFiles, forKey: "fileExplorer.showHidden") }
     }
 
+    /// Whether files ignored by the current local git worktree are shown in the tree.
+    @Published var showIgnoredFiles: Bool {
+        didSet { UserDefaults.standard.set(showIgnoredFiles, forKey: "fileExplorer.showIgnored") }
+    }
+
     @Published private var storedMode: RightSidebarMode
 
     /// Active mode for the right sidebar (file tree, search, sessions, or enabled beta modes).
@@ -41,6 +46,8 @@ final class FileExplorerState: ObservableObject {
         self.dividerPosition = storedPosition > 0 ? CGFloat(storedPosition) : 0.6
         let storedShowHidden = defaults.object(forKey: "fileExplorer.showHidden")
         self.showHiddenFiles = storedShowHidden == nil ? true : defaults.bool(forKey: "fileExplorer.showHidden")
+        let storedShowIgnored = defaults.object(forKey: "fileExplorer.showIgnored")
+        self.showIgnoredFiles = storedShowIgnored == nil ? false : defaults.bool(forKey: "fileExplorer.showIgnored")
         let storedMode = RightSidebarMode(rawValue: defaults.string(forKey: Self.modeKey) ?? "") ?? .files
         self.storedMode = Self.availableMode(storedMode, defaults: defaults)
         defaults.set(self.storedMode.rawValue, forKey: Self.modeKey)

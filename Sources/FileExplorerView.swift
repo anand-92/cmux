@@ -620,6 +620,32 @@ struct FileExplorerPanelView: NSViewRepresentable {
             onOpenFilePreview(node.path)
         }
 
+        @objc func refreshTree(_ sender: Any?) {
+            _ = sender
+            store.reload()
+            store.refreshGitStatus()
+        }
+
+        @objc func collapseAll(_ sender: Any?) {
+            _ = sender
+            store.collapseAll()
+        }
+
+        @MainActor
+        @objc func focusFilter(_ sender: Any?) {
+            _ = sender
+            _ = containerView?.focusSearchField()
+        }
+
+        @MainActor
+        @objc func toggleIgnoredFiles(_ sender: Any?) {
+            _ = sender
+            let nextValue = !state.showIgnoredFiles
+            state.showIgnoredFiles = nextValue
+            store.setShowIgnoredFiles(nextValue)
+            containerView?.updateHeader(store: store)
+        }
+
         // MARK: - Context Menu (NSMenuDelegate)
 
         func menuNeedsUpdate(_ menu: NSMenu) {
@@ -769,6 +795,10 @@ final class FileExplorerContainerView: NSView {
 
         // Header
         headerView.translatesAutoresizingMaskIntoConstraints = false
+        headerView.onRefresh = { [weak coordinator] in coordinator?.refreshTree(nil) }
+        headerView.onCollapseAll = { [weak coordinator] in coordinator?.collapseAll(nil) }
+        headerView.onFocusSearch = { [weak self] in _ = self?.focusSearchField() }
+        headerView.onToggleIgnored = { [weak coordinator] in coordinator?.toggleIgnoredFiles(nil) }
         addSubview(headerView)
 
         // Search bar
@@ -1020,7 +1050,7 @@ final class FileExplorerContainerView: NSView {
         currentRootPath = nextRootPath
         currentProviderIsLocal = nextProviderIsLocal
         currentContentRevision = nextContentRevision
-        headerView.update(displayPath: store.displayRootPath)
+        headerView.update(displayPath: store.displayRootPath, showIgnoredFiles: store.showIgnoredFiles)
         if searchScopeChanged {
             pendingSearchRefreshAfterSettled = false
             refreshSearchIfNeeded()
@@ -1846,8 +1876,17 @@ private final class FileExplorerSearchResultCellView: NSTableCellView {
 final class FileExplorerHeaderView: NSView {
     private let iconView = NSImageView()
     private let pathLabel = NSTextField(labelWithString: "")
+    private let refreshButton = NSButton()
+    private let collapseButton = NSButton()
+    private let searchButton = NSButton()
+    private let ignoredButton = NSButton()
     private var displayPath = ""
     private var quickSearchQuery: String?
+    private var showIgnoredFiles = false
+    var onRefresh: (() -> Void)?
+    var onCollapseAll: (() -> Void)?
+    var onFocusSearch: (() -> Void)?
+    var onToggleIgnored: (() -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -1871,6 +1910,23 @@ final class FileExplorerHeaderView: NSView {
 
         addSubview(iconView)
         addSubview(pathLabel)
+        for button in [refreshButton, collapseButton, searchButton, ignoredButton] {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.isBordered = false
+            button.bezelStyle = .inline
+            button.imagePosition = .imageOnly
+            button.contentTintColor = .secondaryLabelColor
+            addSubview(button)
+        }
+
+        refreshButton.target = self
+        refreshButton.action = #selector(refreshClicked(_:))
+        collapseButton.target = self
+        collapseButton.action = #selector(collapseClicked(_:))
+        searchButton.target = self
+        searchButton.action = #selector(searchClicked(_:))
+        ignoredButton.target = self
+        ignoredButton.action = #selector(ignoredClicked(_:))
 
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: RightSidebarChromeMetrics.secondaryBarHeight),
@@ -1882,13 +1938,34 @@ final class FileExplorerHeaderView: NSView {
 
             pathLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 4),
             pathLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            pathLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            pathLabel.trailingAnchor.constraint(lessThanOrEqualTo: refreshButton.leadingAnchor, constant: -6),
+
+            refreshButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            refreshButton.widthAnchor.constraint(equalToConstant: 22),
+            refreshButton.heightAnchor.constraint(equalToConstant: 22),
+
+            collapseButton.leadingAnchor.constraint(equalTo: refreshButton.trailingAnchor, constant: 2),
+            collapseButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            collapseButton.widthAnchor.constraint(equalToConstant: 22),
+            collapseButton.heightAnchor.constraint(equalToConstant: 22),
+
+            searchButton.leadingAnchor.constraint(equalTo: collapseButton.trailingAnchor, constant: 2),
+            searchButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            searchButton.widthAnchor.constraint(equalToConstant: 22),
+            searchButton.heightAnchor.constraint(equalToConstant: 22),
+
+            ignoredButton.leadingAnchor.constraint(equalTo: searchButton.trailingAnchor, constant: 2),
+            ignoredButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            ignoredButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            ignoredButton.widthAnchor.constraint(equalToConstant: 22),
+            ignoredButton.heightAnchor.constraint(equalToConstant: 22),
         ])
         applyHeaderState()
     }
 
-    func update(displayPath: String) {
+    func update(displayPath: String, showIgnoredFiles: Bool) {
         self.displayPath = displayPath
+        self.showIgnoredFiles = showIgnoredFiles
         applyHeaderState()
     }
 
@@ -1911,6 +1988,44 @@ final class FileExplorerHeaderView: NSView {
             pathLabel.stringValue = displayPath
             pathLabel.toolTip = displayPath
         }
+
+        refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+        refreshButton.toolTip = String(localized: "fileExplorer.toolbar.refresh", defaultValue: "Refresh")
+        collapseButton.image = NSImage(systemSymbolName: "rectangle.compress.vertical", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+        collapseButton.toolTip = String(localized: "fileExplorer.toolbar.collapseAll", defaultValue: "Collapse All")
+        searchButton.image = NSImage(systemSymbolName: "line.3.horizontal.decrease.circle", accessibilityDescription: nil)?
+            .withSymbolConfiguration(config)
+        searchButton.toolTip = String(localized: "fileExplorer.toolbar.filter", defaultValue: "Filter Files")
+        ignoredButton.image = NSImage(
+            systemSymbolName: showIgnoredFiles ? "eye" : "eye.slash",
+            accessibilityDescription: nil
+        )?.withSymbolConfiguration(config)
+        ignoredButton.contentTintColor = showIgnoredFiles ? .controlAccentColor : .secondaryLabelColor
+        ignoredButton.toolTip = showIgnoredFiles
+            ? String(localized: "fileExplorer.toolbar.hideIgnored", defaultValue: "Hide Ignored Files")
+            : String(localized: "fileExplorer.toolbar.showIgnored", defaultValue: "Show Ignored Files")
+    }
+
+    @objc private func refreshClicked(_ sender: NSButton) {
+        _ = sender
+        onRefresh?()
+    }
+
+    @objc private func collapseClicked(_ sender: NSButton) {
+        _ = sender
+        onCollapseAll?()
+    }
+
+    @objc private func searchClicked(_ sender: NSButton) {
+        _ = sender
+        onFocusSearch?()
+    }
+
+    @objc private func ignoredClicked(_ sender: NSButton) {
+        _ = sender
+        onToggleIgnored?()
     }
 }
 

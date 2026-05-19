@@ -841,6 +841,64 @@ final class FileSearchControllerTests: XCTestCase {
         return false
     }
 
+    func testLocalProviderHidesGitIgnoredEntriesByDefault() async throws {
+        let root = try Self.makeTemporaryGitWorktree()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "ignored.log\nbuild/\n".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+        try "keep".write(to: root.appendingPathComponent("keep.txt"), atomically: true, encoding: .utf8)
+        try "ignored".write(to: root.appendingPathComponent("ignored.log"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("build"), withIntermediateDirectories: true)
+
+        let store = FileExplorerStore()
+        store.setProviderForTesting(LocalFileExplorerProvider())
+        store.setRootPath(root.path)
+
+        try await waitFor("non-ignored root entries loaded") {
+            store.rootNodes.map(\.name).contains("keep.txt")
+        }
+
+        XCTAssertTrue(store.rootNodes.contains { $0.name == "keep.txt" })
+        XCTAssertFalse(store.rootNodes.contains { $0.name == "ignored.log" })
+        XCTAssertFalse(store.rootNodes.contains { $0.name == "build" })
+    }
+
+    func testLocalProviderCanShowGitIgnoredEntries() async throws {
+        let root = try Self.makeTemporaryGitWorktree()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "ignored.log\n".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
+        try "ignored".write(to: root.appendingPathComponent("ignored.log"), atomically: true, encoding: .utf8)
+
+        let store = FileExplorerStore()
+        store.setProviderForTesting(LocalFileExplorerProvider())
+        store.setShowIgnoredFiles(true)
+        store.setRootPath(root.path)
+
+        try await waitFor("ignored root entry loaded when enabled") {
+            store.rootNodes.map(\.name).contains("ignored.log")
+        }
+
+        XCTAssertTrue(store.rootNodes.contains { $0.name == "ignored.log" })
+    }
+
+    private static func makeTemporaryGitWorktree() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cmux-file-explorer-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try runGit(["init"], in: root)
+        return root
+    }
+
+    private static func runGit(_ arguments: [String], in directory: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git", "-C", directory.path] + arguments
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+    }
+
     private static func findSearchField(in root: NSView) -> NSSearchField? {
         if let field = root as? NSSearchField,
            field.accessibilityIdentifier() == "FileExplorerSearchField" {

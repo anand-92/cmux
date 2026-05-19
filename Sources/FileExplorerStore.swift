@@ -261,6 +261,85 @@ protocol FileExplorerProvider: AnyObject {
     var isAvailable: Bool { get }
 }
 
+enum LocalGitIgnoreFilter {
+    static func filteredEntries(_ entries: [FileExplorerEntry], rootPath: String) async -> [FileExplorerEntry] {
+        guard !entries.isEmpty else { return entries }
+        let ignored = await ignoredEntryPaths(entries: entries, rootPath: rootPath)
+        guard !ignored.isEmpty else { return entries }
+        return entries.filter { !ignored.contains($0.path) }
+    }
+
+    private static func ignoredEntryPaths(entries: [FileExplorerEntry], rootPath: String) async -> Set<String> {
+        await Task.detached(priority: .utility) {
+            ignoredEntryPathsSync(entries: entries, rootPath: rootPath)
+        }.value
+    }
+
+    private static func ignoredEntryPathsSync(entries: [FileExplorerEntry], rootPath: String) -> Set<String> {
+        guard let worktreeRoot = gitWorktreeRoot(containing: rootPath) else { return [] }
+        let worktreeURL = URL(fileURLWithPath: worktreeRoot, isDirectory: true)
+        let relativePaths = entries.compactMap { entry -> (absolute: String, relative: String)? in
+            guard let relative = relativePath(for: entry.path, relativeTo: worktreeURL) else { return nil }
+            return (entry.path, entry.isDirectory ? relative + "/" : relative)
+        }
+        guard !relativePaths.isEmpty else { return [] }
+
+        let output = runGit(
+            arguments: ["-C", worktreeRoot, "check-ignore", "--stdin"],
+            stdin: relativePaths.map(\.relative).joined(separator: "\n") + "\n"
+        )
+        guard !output.isEmpty else { return [] }
+        let ignoredRelatives = Set(output.split(separator: "\n").map(String.init))
+        return Set(relativePaths.compactMap { ignoredRelatives.contains($0.relative) ? $0.absolute : nil })
+    }
+
+    private static func gitWorktreeRoot(containing path: String) -> String? {
+        let output = runGit(
+            arguments: ["-C", path, "rev-parse", "--show-toplevel"],
+            stdin: nil
+        )
+        let root = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return root.isEmpty ? nil : root
+    }
+
+    private static func relativePath(for path: String, relativeTo rootURL: URL) -> String? {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        let rootPath = rootURL.standardizedFileURL.path
+        let absolutePath = url.path
+        guard absolutePath == rootPath || absolutePath.hasPrefix(rootPath + "/") else { return nil }
+        let relative = absolutePath == rootPath ? "." : String(absolutePath.dropFirst(rootPath.count + 1))
+        return relative.isEmpty ? "." : relative
+    }
+
+    private static func runGit(arguments: [String], stdin: String?) -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git"] + arguments
+
+        let outputPipe = Pipe()
+        let inputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = Pipe()
+        if stdin != nil {
+            process.standardInput = inputPipe
+        }
+
+        do {
+            try process.run()
+            if let stdin, let data = stdin.data(using: .utf8) {
+                inputPipe.fileHandleForWriting.write(data)
+                try? inputPipe.fileHandleForWriting.close()
+            }
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 || process.terminationStatus == 1 else { return "" }
+            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            return String(data: data, encoding: .utf8) ?? ""
+        } catch {
+            return ""
+        }
+    }
+}
+
 struct SSHFileExplorerConnection: Equatable, Sendable {
     let destination: String
     let port: Int?
@@ -598,6 +677,9 @@ final class FileExplorerStore: ObservableObject {
     /// Whether hidden files are shown. Set from FileExplorerState externally.
     var showHiddenFiles: Bool = false
 
+    /// Whether local gitignored files are shown. Set from FileExplorerState externally.
+    private(set) var showIgnoredFiles: Bool = false
+
     /// Watches the root directory for filesystem changes (local only).
     private var directoryWatcher: FileExplorerDirectoryWatcher?
 
@@ -723,6 +805,25 @@ final class FileExplorerStore: ObservableObject {
                 }
             }
         }
+    }
+
+    func setShowHiddenFiles(_ showHidden: Bool) {
+        guard showHiddenFiles != showHidden else { return }
+        showHiddenFiles = showHidden
+        reload()
+    }
+
+    func setShowIgnoredFiles(_ showIgnored: Bool) {
+        guard showIgnoredFiles != showIgnored else { return }
+        showIgnoredFiles = showIgnored
+        reload()
+    }
+
+    func collapseAll() {
+        guard !expandedPaths.isEmpty else { return }
+        expandedPaths.removeAll()
+        pendingDescendIntoFirstChildPath = nil
+        objectWillChange.send()
     }
 
     private func updateDirectoryWatcher() {
@@ -876,7 +977,13 @@ final class FileExplorerStore: ObservableObject {
         }
 
         do {
-            let entries = try await provider.listDirectory(path: path, showHidden: showHiddenFiles)
+            let rawEntries = try await provider.listDirectory(path: path, showHidden: showHiddenFiles)
+            let entries: [FileExplorerEntry]
+            if provider is LocalFileExplorerProvider, !showIgnoredFiles {
+                entries = await LocalGitIgnoreFilter.filteredEntries(rawEntries, rootPath: rootPath)
+            } else {
+                entries = rawEntries
+            }
             try Task.checkCancellation()
             let children = entries.map { entry in
                 let node = FileExplorerNode(name: entry.name, path: entry.path, isDirectory: entry.isDirectory)

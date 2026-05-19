@@ -1124,12 +1124,14 @@ struct CmuxSurfaceTabBarButton: Codable, Sendable, Hashable, Identifiable {
 
     static let newTerminal = actionReference(CmuxSurfaceTabBarBuiltInAction.newTerminal.configID)
     static let newBrowser = actionReference(CmuxSurfaceTabBarBuiltInAction.newBrowser.configID)
+    static let fileExplorer = actionReference(CmuxSurfaceTabBarBuiltInAction.fileExplorer.configID)
     static let splitRight = actionReference(CmuxSurfaceTabBarBuiltInAction.splitRight.configID)
     static let splitDown = actionReference(CmuxSurfaceTabBarBuiltInAction.splitDown.configID)
 
     static let defaults: [CmuxSurfaceTabBarButton] = [
         .newTerminal,
         .newBrowser,
+        .fileExplorer,
         .splitRight,
         .splitDown
     ]
@@ -1508,6 +1510,9 @@ struct CmuxResolvedConfigAction: Identifiable, Sendable, Hashable {
         case .cloudVM:
             title = String(localized: "command.cloudVM.title", defaultValue: "Start Cloud VM")
             keywords = ["cloud", "vm", "virtual", "machine", "remote"]
+        case .fileExplorer:
+            title = String(localized: "command.fileExplorer.title", defaultValue: "File Explorer")
+            keywords = ["file", "files", "explorer", "tree", "folder", "directory"]
         case .newTerminal:
             title = String(localized: "command.newTerminalTab.title", defaultValue: "New Terminal Tab")
             keywords = ["new", "terminal", "tab", "surface"]

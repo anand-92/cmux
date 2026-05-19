@@ -1473,6 +1473,7 @@ struct ContentView: View {
         static let updateHasAvailable = "update.hasAvailable"
         static let cliInstalledInPATH = "cli.installedInPATH"
         static let browserDisabled = "browser.disabled"
+        static let fileExplorerShowsIgnored = "fileExplorer.showsIgnored"
         static func terminalOpenTargetAvailable(_ target: TerminalDirectoryOpenTarget) -> String {
             "terminal.openTarget.\(target.rawValue).available"
         }
@@ -2473,7 +2474,8 @@ struct ContentView: View {
             return
         }
 
-        fileExplorerStore.showHiddenFiles = true
+        fileExplorerStore.setShowHiddenFiles(fileExplorerState.showHiddenFiles)
+        fileExplorerStore.setShowIgnoredFiles(fileExplorerState.showIgnoredFiles)
 
         if tab.isRemoteWorkspace {
             sessionIndexStore.setCurrentDirectoryIfChanged(nil)
@@ -2716,6 +2718,14 @@ struct ContentView: View {
 
         // File explorer: keep the Combine subscription stable across body re-evaluations.
         view = AnyView(view.onChange(of: selectedWorkspaceDirectoryObserver.directoryChangeGeneration) { _ in
+            syncFileExplorerDirectory()
+        })
+
+        view = AnyView(view.onChange(of: fileExplorerState.showHiddenFiles) { _ in
+            syncFileExplorerDirectory()
+        })
+
+        view = AnyView(view.onChange(of: fileExplorerState.showIgnoredFiles) { _ in
             syncFileExplorerDirectory()
         })
 
@@ -6199,6 +6209,7 @@ struct ContentView: View {
         snapshot.setBool(CommandPaletteContextKeys.workspaceMinimalModeEnabled, isMinimalMode)
         snapshot.setBool(CommandPaletteContextKeys.sidebarMatchTerminalBackground, sidebarMatchTerminalBackground)
         snapshot.setBool(CommandPaletteContextKeys.browserDisabled, BrowserAvailabilitySettings.isDisabled())
+        snapshot.setBool(CommandPaletteContextKeys.fileExplorerShowsIgnored, fileExplorerState.showIgnoredFiles)
 
         if let workspace = tabManager.selectedWorkspace {
             let pinTarget = WorkspaceActionDispatcher.Target.single(workspace.id)
@@ -6478,6 +6489,37 @@ struct ContentView: View {
         )
         contributions.append(contentsOf: Self.commandPaletteRightSidebarModeCommandContributions())
         contributions.append(contentsOf: Self.commandPaletteRightSidebarToolPaneCommandContributions())
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.openFile",
+                title: constant(String(localized: "command.openFile.title", defaultValue: "Open File…")),
+                subtitle: constant(String(localized: "command.openFile.subtitle", defaultValue: "Editor")),
+                keywords: ["open", "file", "editor", "preview", "markdown", "code"],
+                when: { $0.bool(CommandPaletteContextKeys.hasWorkspace) }
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.filterFiles",
+                title: constant(String(localized: "command.filterFiles.title", defaultValue: "Filter Files")),
+                subtitle: constant(String(localized: "command.rightSidebarMode.subtitle", defaultValue: "Right Sidebar")),
+                keywords: ["filter", "find", "search", "files", "explorer"],
+                when: { $0.bool(CommandPaletteContextKeys.hasWorkspace) }
+            )
+        )
+        contributions.append(
+            CommandPaletteCommandContribution(
+                commandId: "palette.toggleIgnoredFiles",
+                title: { context in
+                    context.bool(CommandPaletteContextKeys.fileExplorerShowsIgnored)
+                        ? String(localized: "command.hideIgnoredFiles.title", defaultValue: "Hide Ignored Files")
+                        : String(localized: "command.showIgnoredFiles.title", defaultValue: "Show Ignored Files")
+                },
+                subtitle: constant(String(localized: "command.rightSidebarMode.subtitle", defaultValue: "Right Sidebar")),
+                keywords: ["ignored", "gitignore", "files", "explorer", "show", "hide"],
+                when: { $0.bool(CommandPaletteContextKeys.hasWorkspace) }
+            )
+        )
         contributions.append(
             CommandPaletteCommandContribution(
                 commandId: "palette.toggleMatchTerminalBackground",
@@ -7453,6 +7495,18 @@ struct ContentView: View {
             registry.register(commandId: descriptor.commandId) {
                 handleCommandPaletteRightSidebarToolPane(descriptor.mode)
             }
+        }
+        registry.register(commandId: "palette.openFile") {
+            DispatchQueue.main.async {
+                AppDelegate.shared?.showOpenFilePanel(preferredWindow: observedWindow)
+            }
+        }
+        registry.register(commandId: "palette.filterFiles") {
+            handleCommandPaletteRightSidebarMode(.find, observedWindow: observedWindow)
+        }
+        registry.register(commandId: "palette.toggleIgnoredFiles") {
+            fileExplorerState.showIgnoredFiles.toggle()
+            syncFileExplorerDirectory()
         }
         registry.register(commandId: "palette.toggleMatchTerminalBackground") {
             sidebarMatchTerminalBackground.toggle()
