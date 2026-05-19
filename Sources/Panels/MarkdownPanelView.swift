@@ -105,7 +105,8 @@ struct MarkdownPanelView: View {
                     themeBackgroundColor: appearance.contentBackgroundColor,
                     themeForegroundColor: themeForegroundColor,
                     drawsBackground: appearance.drawsContentBackground,
-                    wordWrapEnabled: wordWrapEnabled
+                    wordWrapEnabled: wordWrapEnabled,
+                    filename: URL(fileURLWithPath: panel.filePath).lastPathComponent
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -113,10 +114,12 @@ struct MarkdownPanelView: View {
     }
 
     private var filePathHeader: some View {
-        PanelFilePathHeader(
+        let filename = URL(fileURLWithPath: panel.filePath).lastPathComponent
+        return PanelFilePathHeader(
             iconSystemName: panel.displayIcon ?? "doc.richtext",
             filePath: panel.filePath,
-            foregroundColor: themeForegroundColor
+            foregroundColor: themeForegroundColor,
+            iconColor: FileTypeColor.color(for: filename, isDirectory: false)
         ) {
             if panel.displayMode == .text {
                 PanelHeaderIconButton(

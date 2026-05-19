@@ -19,9 +19,11 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
     let themeForegroundColor: NSColor
     let drawsBackground: Bool
     let wordWrapEnabled: Bool
+    /// Filename (including extension) used to select the syntax-highlight language.
+    var filename: String = ""
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(panel: panel)
+        Coordinator(panel: panel, filename: filename, defaultColor: themeForegroundColor)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -65,6 +67,7 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
             foregroundColor: themeForegroundColor,
             drawsBackground: drawsBackground
         )
+        context.coordinator.attachHighlighter(to: textView)
         return scrollView
     }
 
@@ -88,6 +91,7 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
         context.coordinator.isApplyingPanelUpdate = true
         textView.string = panel.textContent
         context.coordinator.isApplyingPanelUpdate = false
+        context.coordinator.highlightAll()
     }
 
     static func applyTheme(
@@ -129,21 +133,39 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
         }
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var panel: PanelModel
         var isApplyingPanelUpdate = false
+        private let syntaxHighlighter: SyntaxHighlighter
 
-        init(panel: PanelModel) {
+        init(panel: PanelModel, filename: String, defaultColor: NSColor) {
             self.panel = panel
+            let language = SyntaxLanguage.from(filename: filename)
+            self.syntaxHighlighter = SyntaxHighlighter(language: language, defaultColor: defaultColor)
         }
 
         deinit {}
 
-        func textDidChange(_ notification: Notification) {
-            guard !isApplyingPanelUpdate,
-                  let textView = notification.object as? NSTextView else { return }
-            panel.updateTextContent(textView.string)
-            textView.enclosingScrollView?.verticalRulerView?.needsDisplay = true
+        func attachHighlighter(to textView: NSTextView) {
+            guard let storage = textView.textStorage else { return }
+            syntaxHighlighter.attach(to: storage)
+            syntaxHighlighter.highlightAll()
+        }
+
+        func highlightAll() {
+            syntaxHighlighter.highlightAll()
+        }
+
+        nonisolated func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            let content = textView.string
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard !self.isApplyingPanelUpdate else { return }
+                self.panel.updateTextContent(content)
+                textView.enclosingScrollView?.verticalRulerView?.needsDisplay = true
+            }
         }
     }
 }

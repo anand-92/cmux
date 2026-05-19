@@ -2139,7 +2139,8 @@ final class FileExplorerCellView: NSTableCellView {
             } else {
                 iconView.image = NSImage(systemSymbolName: "doc", accessibilityDescription: nil)?
                     .withSymbolConfiguration(symbolConfig)
-                iconView.contentTintColor = style.fileIconTint
+                iconView.contentTintColor = FileTypeColor.nsColor(for: node.name, isDirectory: false)
+                    ?? style.fileIconTint
             }
         }
 

@@ -1234,10 +1234,12 @@ struct FilePreviewPanelView: View {
     }
 
     private var header: some View {
-        PanelFilePathHeader(
+        let filename = URL(fileURLWithPath: panel.filePath).lastPathComponent
+        return PanelFilePathHeader(
             iconSystemName: panel.displayIcon ?? "doc.viewfinder",
             filePath: panel.filePath,
-            foregroundColor: themeForegroundColor
+            foregroundColor: themeForegroundColor,
+            iconColor: FileTypeColor.color(for: filename, isDirectory: false)
         ) {
             if panel.previewMode == .text {
                 PanelHeaderIconButton(
@@ -1280,7 +1282,8 @@ struct FilePreviewPanelView: View {
                     themeBackgroundColor: contentBackgroundColor,
                     themeForegroundColor: themeForegroundColor,
                     drawsBackground: appearance.drawsContentBackground,
-                    wordWrapEnabled: wordWrapEnabled
+                    wordWrapEnabled: wordWrapEnabled,
+                    filename: URL(fileURLWithPath: panel.filePath).lastPathComponent
                 )
             case .pdf:
                 FilePreviewPDFView(
