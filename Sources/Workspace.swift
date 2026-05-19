@@ -14788,6 +14788,15 @@ extension Workspace: BonsplitDelegate {
                     preferredWindow: presentingWindow,
                     debugSource: "surfaceTabBar.cloudVM"
                 )
+            case .fileExplorer:
+                if AppDelegate.shared?.focusRightSidebarInActiveMainWindow(
+                    mode: .files,
+                    focusFirstItem: true,
+                    preferredWindow: presentingWindow
+                ) != true {
+                    AppDelegate.shared?.fileExplorerState?.mode = .files
+                    AppDelegate.shared?.fileExplorerState?.setVisible(true)
+                }
             case .newTerminal, .newBrowser, .splitRight, .splitDown:
                 break
             }

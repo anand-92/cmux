@@ -6601,6 +6601,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
+    /// Shows the "Open File" panel and opens the selected file in cmux's native preview/editor.
+    func showOpenFilePanel(preferredWindow: NSWindow? = nil) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.title = String(localized: "menu.file.openFile.panelTitle", defaultValue: "Open File")
+        panel.prompt = String(localized: "menu.file.openFile.panelPrompt", defaultValue: "Open")
+        if let context = preferredRegisteredMainWindowContext(preferredWindow: preferredWindow)
+            ?? preferredMainWindowContextForWorkspaceCreation(debugSource: "openFilePanel.seed"),
+           let cwd = context.tabManager.selectedWorkspace?.currentDirectory,
+           !cwd.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: cwd)
+        }
+        if panel.runModal() == .OK, let url = panel.url {
+            _ = openFilePreviewInPreferredMainWindow(
+                filePath: url.path,
+                preferredWindow: preferredWindow,
+                debugSource: "shortcut.openFile"
+            )
+        }
+    }
+
     @discardableResult
     func openDirectoryInInlineVSCode(
         _ directoryURL: URL,
@@ -11777,6 +11800,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             return true
         }
 
+        if matchConfiguredShortcut(event: event, action: .openFile) {
+            showOpenFilePanel(preferredWindow: mainWindowForShortcutEvent(event))
+            return true
+        }
+
         // Check Show Notifications shortcut
         if matchConfiguredShortcut(event: event, action: .showNotifications) {
             toggleNotificationsPopover(animated: false, anchorView: fullscreenControlsViewModel?.notificationsAnchorView)
@@ -13432,6 +13460,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 )
                 if didStart { onExecuted?() }
                 return didStart
+            case .fileExplorer:
+                let didFocus = focusRightSidebarInActiveMainWindow(
+                    mode: .files,
+                    focusFirstItem: true,
+                    preferredWindow: resolvedWindow(for: context) ?? preferredWindow
+                )
+                if didFocus { onExecuted?() }
+                return didFocus
             case .newTerminal:
                 context.tabManager.newSurface()
                 onExecuted?()

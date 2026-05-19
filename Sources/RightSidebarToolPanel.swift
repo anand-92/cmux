@@ -31,7 +31,8 @@ final class RightSidebarToolPanel: Panel, ObservableObject {
     var fileExplorerStore: FileExplorerStore {
         if let store = fileExplorerStoreStorage { return store }
         let store = FileExplorerStore()
-        store.showHiddenFiles = true
+        store.setShowHiddenFiles(fileExplorerState.showHiddenFiles)
+        store.setShowIgnoredFiles(fileExplorerState.showIgnoredFiles)
         fileExplorerStoreStorage = store
         if let workspace {
             syncFileExplorerRoot(from: workspace, store: store)
@@ -165,7 +166,8 @@ final class RightSidebarToolPanel: Panel, ObservableObject {
     }
 
     private func syncFileExplorerRoot(from workspace: Workspace, store: FileExplorerStore) {
-        store.showHiddenFiles = true
+        store.setShowHiddenFiles(fileExplorerState.showHiddenFiles)
+        store.setShowIgnoredFiles(fileExplorerState.showIgnoredFiles)
 
         if workspace.isRemoteWorkspace {
             guard let configuration = workspace.remoteConfiguration,

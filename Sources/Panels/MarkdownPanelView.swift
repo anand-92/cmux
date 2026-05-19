@@ -28,6 +28,8 @@ struct MarkdownPanelView: View {
     @State private var focusFlashAnimationGeneration: Int = 0
     @State private var copyConfirmation: CopyConfirmation? = nil
     @State private var copyConfirmationGeneration: Int = 0
+    @AppStorage("filePreview.textEditor.wordWrap")
+    private var wordWrapEnabled = true
 
     private enum CopyConfirmation: Equatable {
         case markdown
@@ -102,7 +104,9 @@ struct MarkdownPanelView: View {
                     isVisibleInUI: isVisibleInUI,
                     themeBackgroundColor: appearance.contentBackgroundColor,
                     themeForegroundColor: themeForegroundColor,
-                    drawsBackground: appearance.drawsContentBackground
+                    drawsBackground: appearance.drawsContentBackground,
+                    wordWrapEnabled: wordWrapEnabled,
+                    filename: URL(fileURLWithPath: panel.filePath).lastPathComponent
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -110,10 +114,12 @@ struct MarkdownPanelView: View {
     }
 
     private var filePathHeader: some View {
-        PanelFilePathHeader(
+        let filename = URL(fileURLWithPath: panel.filePath).lastPathComponent
+        return PanelFilePathHeader(
             iconSystemName: panel.displayIcon ?? "doc.richtext",
             filePath: panel.filePath,
-            foregroundColor: themeForegroundColor
+            foregroundColor: themeForegroundColor,
+            iconColor: FileTypeColor.color(for: filename, isDirectory: false)
         ) {
             if panel.displayMode == .text {
                 PanelHeaderIconButton(
@@ -128,6 +134,14 @@ struct MarkdownPanelView: View {
                     label: String(localized: "markdown.toolbar.save", defaultValue: "Save"),
                     isDisabled: !panel.isDirty || panel.isSaving,
                     action: { panel.saveTextContent() }
+                )
+
+                PanelHeaderIconButton(
+                    systemName: wordWrapEnabled ? "text.word.spacing" : "text.alignleft",
+                    label: wordWrapEnabled
+                        ? String(localized: "filePreview.wordWrap.disable", defaultValue: "Disable Word Wrap")
+                        : String(localized: "filePreview.wordWrap.enable", defaultValue: "Enable Word Wrap"),
+                    action: { wordWrapEnabled.toggle() }
                 )
             }
             markdownModeButton

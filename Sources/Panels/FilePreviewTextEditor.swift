@@ -18,19 +18,24 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
     let themeBackgroundColor: NSColor
     let themeForegroundColor: NSColor
     let drawsBackground: Bool
+    let wordWrapEnabled: Bool
+    /// Filename (including extension) used to select the syntax-highlight language.
+    var filename: String = ""
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(panel: panel)
+        Coordinator(panel: panel, filename: filename, defaultColor: themeForegroundColor)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.isHidden = !isVisibleInUI
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
+        scrollView.hasHorizontalScroller = !wordWrapEnabled
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = drawsBackground
+        scrollView.hasVerticalRuler = true
+        scrollView.rulersVisible = true
 
         let textView = SavingTextView()
         textView.panel = panel
@@ -47,24 +52,22 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
         textView.minSize = NSSize(width: 0, height: 0)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = true
+        textView.isHorizontallyResizable = !wordWrapEnabled
         textView.autoresizingMask = [.width]
-        textView.textContainer?.containerSize = NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude
-        )
-        textView.textContainer?.widthTracksTextView = false
+        Self.applyWordWrap(wordWrapEnabled, to: textView, in: scrollView)
         textView.applyFilePreviewTextEditorInsets()
         textView.string = panel.textContent
         panel.attachTextView(textView)
 
         scrollView.documentView = textView
+        scrollView.verticalRulerView = FilePreviewLineNumberRulerView(textView: textView)
         Self.applyTheme(
             to: scrollView,
             backgroundColor: themeBackgroundColor,
             foregroundColor: themeForegroundColor,
             drawsBackground: drawsBackground
         )
+        context.coordinator.attachHighlighter(to: textView)
         return scrollView
     }
 
@@ -78,13 +81,18 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
             drawsBackground: drawsBackground
         )
         guard let textView = scrollView.documentView as? SavingTextView else { return }
+        context.coordinator.updateHighlighterDefaultColor(themeForegroundColor)
         textView.panel = panel
+        scrollView.hasHorizontalScroller = !wordWrapEnabled
+        Self.applyWordWrap(wordWrapEnabled, to: textView, in: scrollView)
         textView.applyFilePreviewTextEditorInsets()
+        (scrollView.verticalRulerView as? FilePreviewLineNumberRulerView)?.invalidateLineNumbers()
         panel.attachTextView(textView)
         guard textView.string != panel.textContent else { return }
         context.coordinator.isApplyingPanelUpdate = true
         textView.string = panel.textContent
         context.coordinator.isApplyingPanelUpdate = false
+        context.coordinator.highlightAll()
     }
 
     static func applyTheme(
@@ -106,21 +114,150 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
         }
     }
 
+    static func applyWordWrap(_ enabled: Bool, to textView: NSTextView, in scrollView: NSScrollView) {
+        if enabled {
+            textView.isHorizontallyResizable = false
+            textView.autoresizingMask = [.width]
+            textView.textContainer?.widthTracksTextView = true
+            textView.textContainer?.containerSize = NSSize(
+                width: max(scrollView.contentSize.width, 1),
+                height: CGFloat.greatestFiniteMagnitude
+            )
+        } else {
+            textView.isHorizontallyResizable = true
+            textView.autoresizingMask = [.width]
+            textView.textContainer?.widthTracksTextView = false
+            textView.textContainer?.containerSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude,
+                height: CGFloat.greatestFiniteMagnitude
+            )
+        }
+    }
+
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var panel: PanelModel
         var isApplyingPanelUpdate = false
+        private let syntaxHighlighter: SyntaxHighlighter
 
-        init(panel: PanelModel) {
+        init(panel: PanelModel, filename: String, defaultColor: NSColor) {
             self.panel = panel
+            let language = SyntaxLanguage.from(filename: filename)
+            self.syntaxHighlighter = SyntaxHighlighter(language: language, defaultColor: defaultColor)
         }
 
         deinit {}
 
-        func textDidChange(_ notification: Notification) {
-            guard !isApplyingPanelUpdate,
-                  let textView = notification.object as? NSTextView else { return }
-            panel.updateTextContent(textView.string)
+        func attachHighlighter(to textView: NSTextView) {
+            guard let storage = textView.textStorage else { return }
+            syntaxHighlighter.attach(to: storage)
+            syntaxHighlighter.highlightAll()
         }
+
+        func highlightAll() {
+            syntaxHighlighter.highlightAll()
+        }
+
+        func updateHighlighterDefaultColor(_ color: NSColor) {
+            syntaxHighlighter.updateDefaultColor(color)
+        }
+
+        nonisolated func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            let content = textView.string
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard !self.isApplyingPanelUpdate else { return }
+                self.panel.updateTextContent(content)
+                textView.enclosingScrollView?.verticalRulerView?.needsDisplay = true
+            }
+        }
+    }
+}
+
+final class FilePreviewLineNumberRulerView: NSRulerView {
+    private weak var textView: NSTextView?
+    private let gutterWidth: CGFloat = 44
+
+    init(textView: NSTextView) {
+        self.textView = textView
+        super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
+        clientView = textView
+        ruleThickness = gutterWidth
+    }
+
+    required init(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func invalidateLineNumbers() {
+        needsDisplay = true
+    }
+
+    override func drawHashMarksAndLabels(in rect: NSRect) {
+        guard let textView,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            return
+        }
+
+        NSColor.textBackgroundColor.withAlphaComponent(0.35).setFill()
+        rect.fill()
+
+        let visibleRect = textView.visibleRect
+        let glyphRange = layoutManager.glyphRange(
+            forBoundingRect: visibleRect,
+            in: textContainer
+        )
+        var lineNumber = lineNumberForGlyph(at: glyphRange.location, layoutManager: layoutManager)
+        var glyphIndex = glyphRange.location
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: NSColor.tertiaryLabelColor
+        ]
+        let text = textView.string as NSString
+
+        while glyphIndex < NSMaxRange(glyphRange) {
+            var lineRange = NSRange(location: 0, length: 0)
+            let lineRect = layoutManager.lineFragmentRect(
+                forGlyphAt: glyphIndex,
+                effectiveRange: &lineRange,
+                withoutAdditionalLayout: true
+            )
+            let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+            let safeCharIndex = min(characterIndex, text.length)
+            let logicalLineRange = text.lineRange(for: NSRange(location: safeCharIndex, length: 0))
+            let isFirstFragment = characterIndex == logicalLineRange.location
+
+            if isFirstFragment {
+                let y = lineRect.minY + textView.textContainerOrigin.y - visibleRect.minY + 1
+                let label = "\(lineNumber)" as NSString
+                let size = label.size(withAttributes: attributes)
+                label.draw(
+                    at: NSPoint(x: gutterWidth - size.width - 8, y: y),
+                    withAttributes: attributes
+                )
+                lineNumber += 1
+            }
+
+            glyphIndex = NSMaxRange(lineRange)
+            if lineRange.length == 0 {
+                glyphIndex += 1
+            }
+        }
+    }
+
+    private func lineNumberForGlyph(at glyphIndex: Int, layoutManager: NSLayoutManager) -> Int {
+        guard let text = textView?.string as NSString? else { return 1 }
+        let characterIndex = layoutManager.characterIndexForGlyph(at: max(glyphIndex, 0))
+        var line = 1
+        text.enumerateSubstrings(
+            in: NSRange(location: 0, length: min(characterIndex, text.length)),
+            options: [.byLines, .substringNotRequired]
+        ) { _, _, _, _ in
+            line += 1
+        }
+        return line
     }
 }
 

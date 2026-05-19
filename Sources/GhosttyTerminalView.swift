@@ -8906,6 +8906,30 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         cmuxDebugLog("link.wordFallback resolved=\(resolution.path) source=\(resolution.source.rawValue)")
         #endif
 
+        openResolvedWordPath(resolution)
+    }
+
+    @objc private func openFileAtCursorPath(_ sender: NSMenuItem) {
+        let point = (sender.representedObject as? NSValue)?.pointValue ?? lastKnownMousePointInView
+        guard let resolution = resolveWordUnderCursorPath(at: point) else {
+            NSSound.beep()
+            return
+        }
+        openResolvedWordPath(resolution)
+    }
+
+    private func openResolvedWordPath(_ resolution: WordPathResolution) {
+        if let termSurface = terminalSurface,
+           let workspace = termSurface.owningWorkspace(),
+           !workspace.isRemoteTerminalSurface(termSurface.id),
+           CommandClickFileOpenRouter.openInCmux(
+               workspace: workspace,
+               sourcePanelId: termSurface.id,
+               filePath: resolution.path
+           ) {
+            return
+        }
+
         PreferredEditorSettings.open(URL(fileURLWithPath: resolution.path))
     }
 
@@ -9334,18 +9358,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         // path on the main thread for a remote workspace. When the cmux route
         // is applicable but split creation fails, fall back to the preferred
         // editor so the click never silently no-ops.
-        if let termSurface = terminalSurface,
-           let workspace = termSurface.owningWorkspace(),
-           !workspace.isRemoteTerminalSurface(termSurface.id),
-           CommandClickFileOpenRouter.openInCmux(
-               workspace: workspace,
-               sourcePanelId: termSurface.id,
-               filePath: resolution.path
-           ) {
-            return resolution
-        }
-
-        PreferredEditorSettings.open(URL(fileURLWithPath: resolution.path))
+        openResolvedWordPath(resolution)
         return resolution
     }
 
@@ -9491,6 +9504,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
         requestPointerFocusRecovery()
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
+        trackMousePointIfUsable(point)
         ghostty_surface_mouse_pos(surface, point.x, bounds.height - point.y, modsFromEvent(event))
         _ = ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, modsFromEvent(event))
     }
@@ -9555,6 +9569,15 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
                 keyEquivalent: ""
             )
             item.target = self
+        }
+        if resolveWordUnderCursorPath(at: point) != nil {
+            let openPathItem = menu.addItem(
+                withTitle: String(localized: "terminalContextMenu.openFileAtCursorPath", defaultValue: "Open File at Cursor Path"),
+                action: #selector(openFileAtCursorPath(_:)),
+                keyEquivalent: ""
+            )
+            openPathItem.target = self
+            openPathItem.representedObject = NSValue(point: point)
         }
         let pasteItem = menu.addItem(
             withTitle: String(localized: "terminalContextMenu.paste", defaultValue: "Paste"),

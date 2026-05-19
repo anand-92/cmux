@@ -1195,6 +1195,8 @@ struct FilePreviewPanelView: View {
 
     @State private var focusFlashOpacity = 0.0
     @State private var focusFlashAnimationGeneration = 0
+    @AppStorage("filePreview.textEditor.wordWrap")
+    private var wordWrapEnabled = true
 
     private var themeForegroundColor: NSColor {
         appearance.foregroundColor
@@ -1232,10 +1234,12 @@ struct FilePreviewPanelView: View {
     }
 
     private var header: some View {
-        PanelFilePathHeader(
+        let filename = URL(fileURLWithPath: panel.filePath).lastPathComponent
+        return PanelFilePathHeader(
             iconSystemName: panel.displayIcon ?? "doc.viewfinder",
             filePath: panel.filePath,
-            foregroundColor: themeForegroundColor
+            foregroundColor: themeForegroundColor,
+            iconColor: FileTypeColor.color(for: filename, isDirectory: false)
         ) {
             if panel.previewMode == .text {
                 PanelHeaderIconButton(
@@ -1250,6 +1254,14 @@ struct FilePreviewPanelView: View {
                     label: String(localized: "filePreview.save", defaultValue: "Save"),
                     isDisabled: !panel.isDirty || panel.isSaving,
                     action: { panel.saveTextContent() }
+                )
+
+                PanelHeaderIconButton(
+                    systemName: wordWrapEnabled ? "text.word.spacing" : "text.alignleft",
+                    label: wordWrapEnabled
+                        ? String(localized: "filePreview.wordWrap.disable", defaultValue: "Disable Word Wrap")
+                        : String(localized: "filePreview.wordWrap.enable", defaultValue: "Enable Word Wrap"),
+                    action: { wordWrapEnabled.toggle() }
                 )
             }
 
@@ -1269,7 +1281,9 @@ struct FilePreviewPanelView: View {
                     isVisibleInUI: isVisibleInUI,
                     themeBackgroundColor: contentBackgroundColor,
                     themeForegroundColor: themeForegroundColor,
-                    drawsBackground: appearance.drawsContentBackground
+                    drawsBackground: appearance.drawsContentBackground,
+                    wordWrapEnabled: wordWrapEnabled,
+                    filename: URL(fileURLWithPath: panel.filePath).lastPathComponent
                 )
             case .pdf:
                 FilePreviewPDFView(
