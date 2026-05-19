@@ -21,7 +21,7 @@ final class FilePreviewReviewFeedbackTests: XCTestCase {
         )
     }
 
-    func testSavingTextViewUsesChordedSaveShortcut() async throws {
+    func testFilePreviewSaveMatcherFiresOnChordSuffix() throws {
         KeyboardShortcutSettings.resetAll()
         defer { KeyboardShortcutSettings.resetAll() }
 
@@ -33,27 +33,14 @@ final class FilePreviewReviewFeedbackTests: XCTestCase {
             for: .saveFilePreview
         )
 
-        let url = try temporaryTextFile(contents: "original", encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: url) }
-
-        let panel = FilePreviewPanel(workspaceId: UUID(), filePath: url.path)
-        await panel.loadTextContent().value
-
-        let textView = SavingTextView()
-        textView.string = "saved by chord"
-        textView.panel = panel
-        panel.attachTextView(textView)
-        panel.updateTextContent(textView.string)
-
+        let matcher = FilePreviewSaveShortcutMatcher()
         let prefixEvent = try XCTUnwrap(keyEvent(key: "k", keyCode: UInt16(kVK_ANSI_K)))
         let suffixEvent = try XCTUnwrap(keyEvent(key: "s", keyCode: UInt16(kVK_ANSI_S)))
 
-        XCTAssertTrue(textView.performKeyEquivalent(with: prefixEvent))
-        XCTAssertFalse(panel.isSaving)
-        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "original")
-        XCTAssertTrue(textView.performKeyEquivalent(with: suffixEvent))
-        await waitForPanelSave(panel)
-        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "saved by chord")
+        // Prefix stroke should be consumed silently (returns false → consume, do not save).
+        XCTAssertEqual(matcher.match(event: prefixEvent), false)
+        // Suffix stroke completes the chord and requests a save.
+        XCTAssertEqual(matcher.match(event: suffixEvent), true)
     }
 
     func testExtensionlessUTF16TextWithBOMResolvesAsTextAfterSniffing() throws {
@@ -168,19 +155,6 @@ final class FilePreviewReviewFeedbackTests: XCTestCase {
         )
     }
 
-    private func waitForPanelSave(
-        _ panel: FilePreviewPanel,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) async {
-        let deadline = Date().addingTimeInterval(2)
-        while panel.isSaving, Date() < deadline {
-            await Task.yield()
-        }
-        if panel.isSaving {
-            XCTFail("Timed out waiting for panel save", file: file, line: line)
-        }
-    }
 }
 
 private final class FilePreviewReviewFocusTestView: NSView {

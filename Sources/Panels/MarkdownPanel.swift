@@ -65,7 +65,8 @@ final class MarkdownPanel: Panel, ObservableObject, FilePreviewTextEditingPanel 
     private var saveGeneration: Int = 0
     private var activeSaveGeneration: Int?
     private var pendingSearchNeedle: String?
-    private weak var textView: NSTextView?
+    private weak var textEditorView: NSView?
+    private var textEditorAccess: FilePreviewTextEditorAccess?
     private var isClosed: Bool = false
     private let watchQueue = DispatchQueue(label: "com.cmux.markdown-file-watch", qos: .utility)
 
@@ -85,7 +86,9 @@ final class MarkdownPanel: Panel, ObservableObject, FilePreviewTextEditingPanel 
 
     func focus() {
         guard displayMode == .text else { return }
-        _ = textView?.window?.makeFirstResponder(textView)
+        if let view = textEditorView {
+            _ = view.window?.makeFirstResponder(view)
+        }
         applyPendingSearchNeedleIfPossible()
     }
 
@@ -97,7 +100,8 @@ final class MarkdownPanel: Panel, ObservableObject, FilePreviewTextEditingPanel 
         isClosed = true
         rendererSession.close()
         GlobalSearchCoordinator.shared.purgePanel(id: id)
-        textView = nil
+        textEditorView = nil
+        textEditorAccess = nil
         stopWatching()
     }
 
@@ -115,8 +119,9 @@ final class MarkdownPanel: Panel, ObservableObject, FilePreviewTextEditingPanel 
         }
     }
 
-    func attachTextView(_ textView: NSTextView) {
-        self.textView = textView
+    func attachTextEditorView(_ view: NSView, access: FilePreviewTextEditorAccess?) {
+        self.textEditorView = view
+        self.textEditorAccess = access
     }
 
     func retryPendingFocus() {
@@ -148,9 +153,8 @@ final class MarkdownPanel: Panel, ObservableObject, FilePreviewTextEditingPanel 
     @discardableResult
     func saveTextContent() -> Task<Void, Never>? {
         guard !isSaving else { return nil }
-        let currentContent = textView?.string ?? textContent
+        let currentContent = textContent
         guard currentContent != originalTextContent else {
-            textContent = currentContent
             content = currentContent
             isDirty = false
             GlobalSearchCoordinator.shared.captureMarkdownPanel(self)
@@ -247,11 +251,12 @@ final class MarkdownPanel: Panel, ObservableObject, FilePreviewTextEditingPanel 
 
     private func applyPendingSearchNeedleIfPossible() {
         guard let needle = pendingSearchNeedle,
-              let textView else {
+              let view = textEditorView,
+              let access = textEditorAccess else {
             return
         }
 
-        let range = (textView.string as NSString).range(
+        let range = (textContent as NSString).range(
             of: needle,
             options: [.caseInsensitive, .diacriticInsensitive]
         )
@@ -260,9 +265,9 @@ final class MarkdownPanel: Panel, ObservableObject, FilePreviewTextEditingPanel 
             return
         }
 
-        textView.window?.makeFirstResponder(textView)
-        textView.setSelectedRange(range)
-        textView.scrollRangeToVisible(range)
+        view.window?.makeFirstResponder(view)
+        access.selectRange(range)
+        access.scrollToRange(range)
         pendingSearchNeedle = nil
     }
 

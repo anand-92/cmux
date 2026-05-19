@@ -208,3 +208,100 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+---
+
+## File Preview Source Editor
+
+cmux's file-preview text editor (text and markdown panels) uses tree-sitter
+backed syntax highlighting via the following Swift Package Manager
+dependencies. They are linked into the macOS app target.
+
+### CodeEditSourceEditor
+
+- **Version:** 0.15.2
+- **License:** MIT License
+- **Copyright:** Copyright (c) CodeEdit
+- **Source:** https://github.com/CodeEditApp/CodeEditSourceEditor
+
+### CodeEditTextView
+
+- **Version:** 0.12.1
+- **License:** MIT License
+- **Copyright:** Copyright (c) CodeEdit
+- **Source:** https://github.com/CodeEditApp/CodeEditTextView
+
+### CodeEditLanguages
+
+- **Version:** 0.1.20
+- **License:** MIT License
+- **Copyright:** Copyright (c) CodeEdit
+- **Source:** https://github.com/CodeEditApp/CodeEditLanguages
+
+### CodeEditSymbols
+
+- **Version:** 0.2.3
+- **License:** MIT License
+- **Copyright:** Copyright (c) CodeEdit
+- **Source:** https://github.com/CodeEditApp/CodeEditSymbols
+
+The above CodeEdit projects are distributed under the MIT License:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+### SwiftTreeSitter
+
+- **Version:** 0.25.0
+- **License:** BSD 3-Clause License
+- **Copyright:** Copyright (c) 2022, Chime
+- **Source:** https://github.com/ChimeHQ/SwiftTreeSitter
+
+### Rearrange
+
+- **Version:** 2.1.1
+- **License:** BSD 3-Clause License
+- **Copyright:** Copyright (c) Chime
+- **Source:** https://github.com/ChimeHQ/Rearrange
+
+### TextStory
+
+- **Version:** 0.9.2
+- **License:** BSD 3-Clause License
+- **Copyright:** Copyright (c) Chime
+- **Source:** https://github.com/ChimeHQ/TextStory
+
+### TextFormation
+
+- **Version:** 0.9.0
+- **License:** BSD 3-Clause License
+- **Copyright:** Copyright (c) Chime
+- **Source:** https://github.com/ChimeHQ/TextFormation
+
+The above ChimeHQ projects are distributed under the BSD 3-Clause License
+text reproduced earlier in this file.
+
+### tree-sitter
+
+- **Version:** 0.25.10
+- **License:** MIT License
+- **Copyright:** Copyright (c) 2018 Max Brunsfeld
+- **Source:** https://github.com/tree-sitter/tree-sitter
+
+tree-sitter is distributed under the MIT License text reproduced in the
+CodeEdit section above.

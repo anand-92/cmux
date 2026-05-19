@@ -500,6 +500,13 @@ fi
 if [[ "${CMUX_SKIP_ZIG_BUILD:-}" == "1" ]]; then
   XCODEBUILD_ARGS+=(CMUX_SKIP_ZIG_BUILD=1)
 fi
+# Some SPM dependencies (CodeEditTextView, CodeEditSourceEditor) ship SwiftLint
+# build-tool plugins that require manual GUI trust on first use. Set
+# CMUX_SKIP_PACKAGE_PLUGIN_VALIDATION=1 to skip that interactive validation in
+# agent / CI contexts.
+if [[ "${CMUX_SKIP_PACKAGE_PLUGIN_VALIDATION:-}" == "1" ]]; then
+  XCODEBUILD_ARGS+=(-skipPackagePluginValidation -skipMacroValidation)
+fi
 XCODEBUILD_ARGS+=(build)
 
 XCODEBUILD_LOCK="${TMPDIR:-/tmp}/cmux-xcodebuild-$(id -u).lock"

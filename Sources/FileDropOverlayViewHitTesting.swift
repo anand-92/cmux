@@ -408,8 +408,12 @@ extension FileDropOverlayView {
     }
 
     func paneDropTargetForTextDrop(at windowPoint: NSPoint) -> (any FileDropPaneTarget)? {
-        if let textView = editableTextViewUnderPoint(windowPoint),
-           !(textView is SavingTextView) {
+        // If the cursor is over an editable AppKit text field (command palette, comment
+        // composer, feed editor, etc.), let that field handle the drop. The file-preview
+        // text editor is no longer an NSTextView (it's CodeEditTextView.TextView, hosted
+        // inside CodeEditSourceEditor), so editableTextViewUnderPoint will not return it
+        // and the pane drop target will take over.
+        if editableTextViewUnderPoint(windowPoint) != nil {
             return nil
         }
         return paneDropTargetUnderPoint(windowPoint)

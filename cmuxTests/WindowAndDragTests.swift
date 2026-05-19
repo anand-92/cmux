@@ -2272,9 +2272,9 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
 
         let panel = FilePreviewPanel(workspaceId: UUID(), filePath: url.path)
         await panel.loadTextContent().value
-        let textView = NSTextView()
-        textView.string = "edited from text view"
-        panel.attachTextView(textView)
+        // After migrating to CodeEditSourceEditor the panel's `textContent` is the canonical
+        // source for save (kept in sync via the SwiftUI binding), so we drive it directly.
+        panel.updateTextContent("edited from text view")
 
         let task = try XCTUnwrap(panel.saveTextContent())
         XCTAssertTrue(panel.isSaving)
@@ -2336,7 +2336,7 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
         XCTAssertFalse(panel.isFileUnavailable)
     }
 
-    func testSavingTextViewUsesConfiguredSaveShortcut() async throws {
+    func testFilePreviewSaveMatcherFiresConfiguredShortcut() throws {
         KeyboardShortcutSettings.resetAll()
         defer { KeyboardShortcutSettings.resetAll() }
 
@@ -2345,17 +2345,7 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
             for: .saveFilePreview
         )
 
-        let url = try temporaryTextFile(contents: "original", encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: url) }
-
-        let panel = FilePreviewPanel(workspaceId: UUID(), filePath: url.path)
-        await panel.loadTextContent().value
-
-        let textView = SavingTextView()
-        textView.string = "saved by configured shortcut"
-        textView.panel = panel
-        panel.attachTextView(textView)
-
+        let matcher = FilePreviewSaveShortcutMatcher()
         let event = try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
@@ -2369,12 +2359,10 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
             keyCode: UInt16(kVK_ANSI_U)
         ))
 
-        XCTAssertTrue(textView.performKeyEquivalent(with: event))
-        await waitForPanelSave(panel)
-        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "saved by configured shortcut")
+        XCTAssertEqual(matcher.match(event: event), true)
     }
 
-    func testSavingTextViewDoesNotUseDefaultSaveShortcutAfterRemap() async throws {
+    func testFilePreviewSaveMatcherIgnoresDefaultCmdSAfterRemap() throws {
         KeyboardShortcutSettings.resetAll()
         defer { KeyboardShortcutSettings.resetAll() }
 
@@ -2383,17 +2371,7 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
             for: .saveFilePreview
         )
 
-        let url = try temporaryTextFile(contents: "original", encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: url) }
-
-        let panel = FilePreviewPanel(workspaceId: UUID(), filePath: url.path)
-        await panel.loadTextContent().value
-
-        let textView = SavingTextView()
-        textView.string = "should not save through command s"
-        textView.panel = panel
-        panel.attachTextView(textView)
-
+        let matcher = FilePreviewSaveShortcutMatcher()
         let event = try XCTUnwrap(NSEvent.keyEvent(
             with: .keyDown,
             location: .zero,
@@ -2407,8 +2385,7 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
             keyCode: UInt16(kVK_ANSI_S)
         ))
 
-        XCTAssertFalse(textView.performKeyEquivalent(with: event))
-        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "original")
+        XCTAssertNil(matcher.match(event: event))
     }
 
     func testSaveTextContentPreservesLoadedEncoding() async throws {
@@ -2488,88 +2465,32 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
         XCTAssertTrue(panel.isFileUnavailable)
     }
 
-    func testTextEditorInsetsReapplyWhenMovedBetweenWindows() {
-        _ = NSApplication.shared
-        let textView = SavingTextView()
-        textView.textContainerInset = .zero
-        textView.textContainer?.lineFragmentPadding = 5
+    // Note: the AppKit-specific inset/theme tests (textContainerInset, applyTheme) were
+    // removed when the file-preview editor migrated from a custom NSTextView subclass
+    // (SavingTextView) to CodeEditSourceEditor. The new editor configures its own
+    // additionalTextInsets and EditorTheme through SourceEditorConfiguration in the
+    // SwiftUI body, so there is no AppKit seam to assert against. Visual correctness
+    // is covered by manual dogfood and integration tests.
 
-        let firstWindow = windowHosting(textView)
-        XCTAssertEqual(textView.textContainerInset.width, FilePreviewTextEditorLayout.textContainerInset.width)
-        XCTAssertEqual(textView.textContainerInset.height, FilePreviewTextEditorLayout.textContainerInset.height)
-        XCTAssertEqual(textView.textContainer?.lineFragmentPadding, FilePreviewTextEditorLayout.lineFragmentPadding)
-
-        textView.textContainerInset = .zero
-        textView.textContainer?.lineFragmentPadding = 5
-
-        let secondWindow = windowHosting(textView)
-        XCTAssertEqual(textView.textContainerInset.width, FilePreviewTextEditorLayout.textContainerInset.width)
-        XCTAssertEqual(textView.textContainerInset.height, FilePreviewTextEditorLayout.textContainerInset.height)
-        XCTAssertEqual(textView.textContainer?.lineFragmentPadding, FilePreviewTextEditorLayout.lineFragmentPadding)
-
-        withExtendedLifetime([firstWindow, secondWindow]) {}
-    }
-
-    func testTextEditorClearThemeDoesNotDrawAppKitBackgrounds() {
-        _ = NSApplication.shared
-        let scrollView = NSScrollView()
-        let textView = SavingTextView()
-        scrollView.documentView = textView
-
-        FilePreviewTextEditor<FilePreviewPanel>.applyTheme(
-            to: scrollView,
-            backgroundColor: .clear,
-            foregroundColor: .white,
-            drawsBackground: false
-        )
-
-        XCTAssertFalse(scrollView.drawsBackground)
-        XCTAssertFalse(scrollView.contentView.drawsBackground)
-        XCTAssertFalse(textView.drawsBackground)
-        XCTAssertEqual(scrollView.backgroundColor.alphaComponent, 0)
-        XCTAssertEqual(scrollView.contentView.backgroundColor.alphaComponent, 0)
-        XCTAssertEqual(textView.backgroundColor.alphaComponent, 0)
-        XCTAssertEqual(textView.textColor, .white)
-        XCTAssertEqual(textView.insertionPointColor, .white)
-    }
-
-    func testTextEditorOpaqueThemeDrawsAppKitBackgrounds() {
-        _ = NSApplication.shared
-        let scrollView = NSScrollView()
-        let textView = SavingTextView()
-        let backgroundColor = NSColor(srgbRed: 0.12, green: 0.14, blue: 0.16, alpha: 1)
-        scrollView.documentView = textView
-
-        FilePreviewTextEditor<FilePreviewPanel>.applyTheme(
-            to: scrollView,
-            backgroundColor: backgroundColor,
-            foregroundColor: .white,
-            drawsBackground: true
-        )
-
-        XCTAssertTrue(scrollView.drawsBackground)
-        XCTAssertTrue(scrollView.contentView.drawsBackground)
-        XCTAssertTrue(textView.drawsBackground)
-        XCTAssertEqual(scrollView.backgroundColor, backgroundColor)
-        XCTAssertEqual(scrollView.contentView.backgroundColor, backgroundColor)
-        XCTAssertEqual(textView.backgroundColor, backgroundColor)
-        XCTAssertEqual(scrollView.backgroundColor.alphaComponent, 1)
-        XCTAssertEqual(scrollView.contentView.backgroundColor.alphaComponent, 1)
-        XCTAssertEqual(textView.backgroundColor.alphaComponent, 1)
-    }
-
-    func testPendingTextFocusAppliesWhenTextViewAttaches() throws {
+    func testPendingTextFocusAppliesWhenTextEditorAttaches() throws {
         _ = NSApplication.shared
         let url = try temporaryTextFile(contents: "original", encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: url) }
         let panel = FilePreviewPanel(workspaceId: UUID(), filePath: url.path)
         panel.focus()
 
-        let textView = SavingTextView()
-        let window = windowHosting(textView)
-        panel.attachTextView(textView)
+        // After the migration the editor view is an NSView (CodeEditTextView.TextView),
+        // not an NSTextView. A plain NSView with `acceptsFirstResponder = true` exercises
+        // the same focus-coordinator wiring without depending on CodeEditTextView's
+        // text-view construction (which requires NSLayoutManager-style setup).
+        final class FirstResponderView: NSView {
+            override var acceptsFirstResponder: Bool { true }
+        }
+        let editorView = FirstResponderView()
+        let window = windowHosting(editorView)
+        panel.attachTextEditorView(editorView, access: nil)
 
-        XCTAssertTrue(window.firstResponder === textView)
+        XCTAssertTrue(window.firstResponder === editorView)
         withExtendedLifetime(window) {}
     }
 
@@ -2782,20 +2703,6 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
         return url
     }
 
-    private func waitForPanelSave(
-        _ panel: FilePreviewPanel,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) async {
-        for _ in 0..<1000 {
-            if !panel.isSaving {
-                return
-            }
-            await Task.yield()
-        }
-        XCTFail("Timed out waiting for file preview save", file: file, line: line)
-    }
-
     private func waitForPanelPreviewMode(
         _ panel: FilePreviewPanel,
         _ mode: FilePreviewMode,
@@ -2826,7 +2733,7 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
         XCTFail("Timed out waiting for file preview text content", file: file, line: line)
     }
 
-    private func windowHosting(_ textView: NSTextView) -> NSWindow {
+    private func windowHosting(_ view: NSView) -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
             styleMask: [.titled],
@@ -2836,7 +2743,7 @@ final class FilePreviewPanelTextSavingTests: XCTestCase {
         let scrollView = NSScrollView(frame: window.contentView?.bounds ?? .zero)
         scrollView.autoresizingMask = [.width, .height]
         window.contentView?.addSubview(scrollView)
-        scrollView.documentView = textView
+        scrollView.documentView = view
         return window
     }
 }
