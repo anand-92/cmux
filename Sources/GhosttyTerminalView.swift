@@ -8914,8 +8914,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
     }
 
     @objc private func openFileAtCursorPath(_ sender: NSMenuItem) {
-        _ = sender
-        let point = lastKnownMousePointInView
+        let point = (sender.representedObject as? NSValue)?.pointValue ?? lastKnownMousePointInView
         guard let resolution = resolveWordUnderCursorPath(at: point) else {
             NSSound.beep()
             return
@@ -9582,6 +9581,7 @@ class GhosttyNSView: NSView, NSUserInterfaceValidations {
                 keyEquivalent: ""
             )
             openPathItem.target = self
+            openPathItem.representedObject = NSValue(point: point)
         }
         let pasteItem = menu.addItem(
             withTitle: String(localized: "terminalContextMenu.paste", defaultValue: "Paste"),

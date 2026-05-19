@@ -7506,7 +7506,6 @@ struct ContentView: View {
         }
         registry.register(commandId: "palette.toggleIgnoredFiles") {
             fileExplorerState.showIgnoredFiles.toggle()
-            syncFileExplorerDirectory()
         }
         registry.register(commandId: "palette.toggleMatchTerminalBackground") {
             sidebarMatchTerminalBackground.toggle()

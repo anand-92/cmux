@@ -2203,6 +2203,7 @@ final class CmuxConfigStore: ObservableObject {
         }) ?? [
             .builtIn(.newTerminal),
             .builtIn(.newBrowser),
+            .builtIn(.fileExplorer),
             .builtIn(.splitRight),
             .builtIn(.splitDown)
         ]

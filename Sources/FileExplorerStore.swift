@@ -319,7 +319,7 @@ enum LocalGitIgnoreFilter {
         let outputPipe = Pipe()
         let inputPipe = Pipe()
         process.standardOutput = outputPipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
         if stdin != nil {
             process.standardInput = inputPipe
         }
@@ -330,9 +330,9 @@ enum LocalGitIgnoreFilter {
                 inputPipe.fileHandleForWriting.write(data)
                 try? inputPipe.fileHandleForWriting.close()
             }
+            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0 || process.terminationStatus == 1 else { return "" }
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
             return String(data: data, encoding: .utf8) ?? ""
         } catch {
             return ""

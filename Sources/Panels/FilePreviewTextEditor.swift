@@ -81,6 +81,7 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
             drawsBackground: drawsBackground
         )
         guard let textView = scrollView.documentView as? SavingTextView else { return }
+        context.coordinator.updateHighlighterDefaultColor(themeForegroundColor)
         textView.panel = panel
         scrollView.hasHorizontalScroller = !wordWrapEnabled
         Self.applyWordWrap(wordWrapEnabled, to: textView, in: scrollView)
@@ -157,6 +158,10 @@ struct FilePreviewTextEditor<PanelModel>: NSViewRepresentable where PanelModel: 
             syntaxHighlighter.highlightAll()
         }
 
+        func updateHighlighterDefaultColor(_ color: NSColor) {
+            syntaxHighlighter.updateDefaultColor(color)
+        }
+
         nonisolated func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             let content = textView.string
@@ -210,6 +215,7 @@ final class FilePreviewLineNumberRulerView: NSRulerView {
             .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular),
             .foregroundColor: NSColor.tertiaryLabelColor
         ]
+        let text = textView.string as NSString
 
         while glyphIndex < NSMaxRange(glyphRange) {
             var lineRange = NSRange(location: 0, length: 0)
@@ -218,15 +224,23 @@ final class FilePreviewLineNumberRulerView: NSRulerView {
                 effectiveRange: &lineRange,
                 withoutAdditionalLayout: true
             )
-            let y = lineRect.minY + textView.textContainerOrigin.y - visibleRect.minY + 1
-            let label = "\(lineNumber)" as NSString
-            let size = label.size(withAttributes: attributes)
-            label.draw(
-                at: NSPoint(x: gutterWidth - size.width - 8, y: y),
-                withAttributes: attributes
-            )
+            let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+            let safeCharIndex = min(characterIndex, text.length)
+            let logicalLineRange = text.lineRange(for: NSRange(location: safeCharIndex, length: 0))
+            let isFirstFragment = characterIndex == logicalLineRange.location
+
+            if isFirstFragment {
+                let y = lineRect.minY + textView.textContainerOrigin.y - visibleRect.minY + 1
+                let label = "\(lineNumber)" as NSString
+                let size = label.size(withAttributes: attributes)
+                label.draw(
+                    at: NSPoint(x: gutterWidth - size.width - 8, y: y),
+                    withAttributes: attributes
+                )
+                lineNumber += 1
+            }
+
             glyphIndex = NSMaxRange(lineRange)
-            lineNumber += 1
             if lineRange.length == 0 {
                 glyphIndex += 1
             }

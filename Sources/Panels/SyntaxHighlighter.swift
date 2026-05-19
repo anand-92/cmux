@@ -358,7 +358,7 @@ private enum SyntaxPatternLibrary {
         TokenPattern(kind: .string,     pattern: singleQuotedStr),
         TokenPattern(kind: .keyword,    pattern: "\\b(?:true|false|null|yes|no|on|off)\\b"),
         TokenPattern(kind: .typeIdentifier, pattern: "^[\\w.-]+(?=:)", options: [.anchorsMatchLines]),
-        TokenPattern(kind: .preprocessor, pattern: "^---$|^\\.\\.\\.\\.$", options: [.anchorsMatchLines]),
+        TokenPattern(kind: .preprocessor, pattern: "^---$|^\\.\\.\\.$", options: [.anchorsMatchLines]),
         TokenPattern(kind: .number,     pattern: "-?\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b"),
     ]}
 

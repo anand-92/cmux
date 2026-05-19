@@ -1991,21 +1991,29 @@ final class FileExplorerHeaderView: NSView {
 
         refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)?
             .withSymbolConfiguration(config)
-        refreshButton.toolTip = String(localized: "fileExplorer.toolbar.refresh", defaultValue: "Refresh")
+        let refreshLabel = String(localized: "fileExplorer.toolbar.refresh", defaultValue: "Refresh")
+        refreshButton.toolTip = refreshLabel
+        refreshButton.setAccessibilityLabel(refreshLabel)
         collapseButton.image = NSImage(systemSymbolName: "rectangle.compress.vertical", accessibilityDescription: nil)?
             .withSymbolConfiguration(config)
-        collapseButton.toolTip = String(localized: "fileExplorer.toolbar.collapseAll", defaultValue: "Collapse All")
+        let collapseLabel = String(localized: "fileExplorer.toolbar.collapseAll", defaultValue: "Collapse All")
+        collapseButton.toolTip = collapseLabel
+        collapseButton.setAccessibilityLabel(collapseLabel)
         searchButton.image = NSImage(systemSymbolName: "line.3.horizontal.decrease.circle", accessibilityDescription: nil)?
             .withSymbolConfiguration(config)
-        searchButton.toolTip = String(localized: "fileExplorer.toolbar.filter", defaultValue: "Filter Files")
+        let searchLabel = String(localized: "fileExplorer.toolbar.filter", defaultValue: "Filter Files")
+        searchButton.toolTip = searchLabel
+        searchButton.setAccessibilityLabel(searchLabel)
         ignoredButton.image = NSImage(
             systemSymbolName: showIgnoredFiles ? "eye" : "eye.slash",
             accessibilityDescription: nil
         )?.withSymbolConfiguration(config)
         ignoredButton.contentTintColor = showIgnoredFiles ? .controlAccentColor : .secondaryLabelColor
-        ignoredButton.toolTip = showIgnoredFiles
+        let ignoredLabel = showIgnoredFiles
             ? String(localized: "fileExplorer.toolbar.hideIgnored", defaultValue: "Hide Ignored Files")
             : String(localized: "fileExplorer.toolbar.showIgnored", defaultValue: "Show Ignored Files")
+        ignoredButton.toolTip = ignoredLabel
+        ignoredButton.setAccessibilityLabel(ignoredLabel)
     }
 
     @objc private func refreshClicked(_ sender: NSButton) {
